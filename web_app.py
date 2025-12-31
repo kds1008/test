@@ -157,7 +157,8 @@ def show_farm(sm, crops, history, target_user, logged_in_user):
             st.line_chart(chart_data)
         else:
             # No sells yet
-            pass
+            st.subheader("📈 자산 성장 그래프")
+            st.info("아직 수확(매도) 이력이 없어 그래프가 표시되지 않습니다. 작물을 수확해보세요!")
 
     if not crops:
         st.info("농장이 비어있습니다.")
