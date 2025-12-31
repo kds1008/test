@@ -121,7 +121,7 @@ def main():
     history = sm.load_history(target_user)
     
     if menu == "농장 (Farm)":
-        show_farm(sm, crops, target_user, user)
+        show_farm(sm, crops, history, target_user, user)
     elif menu == "작물 심기 (Plant)":
         show_plant(sm, user) # Only owner accesses this
     elif menu == "수확 하기 (Harvest)":
@@ -129,9 +129,36 @@ def main():
     elif menu == "장부 (History)":
         show_history(history)
 
-def show_farm(sm, crops, target_user, logged_in_user):
+def show_farm(sm, crops, history, target_user, logged_in_user):
     st.header("🏡 농장 현황")
-    
+
+    # --- Asset Growth Chart ---
+    if history:
+        # 1. Convert to DataFrame
+        df_hist = pd.DataFrame(history)
+        
+        # 2. Filter for Sells (Realized Profit)
+        # Note: We can also track "Invested Amount" if needed, but "Profit" is what user asked.
+        # Let's track Cumulative Profit.
+        df_sells = df_hist[df_hist['type'] == '매도'].copy()
+        
+        if not df_sells.empty:
+            # Sort by Date/Time
+            df_sells['datetime'] = pd.to_datetime(df_sells['time'])
+            df_sells = df_sells.sort_values('datetime')
+            
+            # Calculate Cumulative Profit
+            df_sells['cum_profit'] = df_sells['profit_amt'].cumsum()
+            
+            # Chart Data
+            chart_data = df_sells[['datetime', 'cum_profit']].set_index('datetime')
+            
+            st.subheader("📈 자산 성장 그래프 (누적 수익)")
+            st.line_chart(chart_data)
+        else:
+            # No sells yet
+            pass
+
     if not crops:
         st.info("농장이 비어있습니다.")
     else:
