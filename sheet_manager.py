@@ -258,3 +258,24 @@ class SheetManager:
             return [r['Nickname'] for r in records if r['Nickname']]
         except:
             return []
+
+    # --- Guestbook Operations ---
+
+    def add_guestbook_message(self, receiver, sender, message):
+        ws = self._get_worksheet("Guestbook")
+        self._ensure_headers(ws, ["Receiver", "Sender", "Message", "Date"])
+        
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        row = [receiver, sender, message, current_time]
+        ws.append_row(row)
+
+    def get_guestbook_messages(self, receiver):
+        ws = self._get_worksheet("Guestbook")
+        if not ws: return []
+        
+        self._ensure_headers(ws, ["Receiver", "Sender", "Message", "Date"])
+        
+        all_records = ws.get_all_records()
+        # Filter by Receiver
+        msgs = [r for r in all_records if str(r['Receiver']) == receiver]
+        return msgs

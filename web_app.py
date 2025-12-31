@@ -121,7 +121,7 @@ def main():
     history = sm.load_history(target_user)
     
     if menu == "농장 (Farm)":
-        show_farm(crops)
+        show_farm(sm, crops, target_user, user)
     elif menu == "작물 심기 (Plant)":
         show_plant(sm, user) # Only owner accesses this
     elif menu == "수확 하기 (Harvest)":
@@ -129,64 +129,89 @@ def main():
     elif menu == "장부 (History)":
         show_history(history)
 
-def show_farm(crops):
+def show_farm(sm, crops, target_user, logged_in_user):
     st.header("🏡 농장 현황")
     
     if not crops:
-        st.info("농장이 비어있습니다. '작물 심기' 메뉴에서 작물을 추가하세요!")
-        return
+        st.info("농장이 비어있습니다.")
+    else:
+        # Process Data for Display
+        rows = []
+        total_buy = 0
+        total_val = 0
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i, crop in enumerate(crops):
+            status_text.text(f"Updating {crop['ticker']}...")
+            current_price = get_current_price(crop["ticker"])
+            progress_bar.progress((i + 1) / len(crops))
+            
+            profit_rate = ((current_price - crop["buy_price"]) / crop["buy_price"]) * 100 if crop["buy_price"] > 0 else 0
+            profit_amt = (current_price - crop["buy_price"]) * crop["quantity"]
+            
+            # Daily Logic
+            buy_dt = datetime.datetime.strptime(crop["buy_date"], "%Y-%m-%d")
+            days = max(1, (datetime.datetime.now() - buy_dt).days)
+            daily_rate = profit_rate / days
+            
+            total_buy += crop["buy_price"] * crop["quantity"]
+            total_val += current_price * crop["quantity"]
+            
+            rows.append({
+                "상태": get_status_emoji(profit_rate),
+                "종목": crop["ticker"],
+                "매수가": f"${crop['buy_price']:.2f}",
+                "현재가": f"${current_price:.2f}",
+                "수익률": f"{profit_rate:.2f}%",
+                "일간": f"{daily_rate:.2f}%/일",
+                "수익금": f"${profit_amt:.2f}",
+                "수량": crop["quantity"],
+                "매수일": crop["buy_date"]
+            })
+        
+        status_text.empty()
+        progress_bar.empty()
+        
+        # Summary Metrics
+        if total_buy > 0:
+            total_profit = total_val - total_buy
+            total_profit_rate = (total_profit / total_buy) * 100
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("총 가치", f"${total_val:,.2f}")
+            col2.metric("총 매수액", f"${total_buy:,.2f}")
+            col3.metric("총 수익", f"${total_profit:,.2f}", f"{total_profit_rate:.2f}%")
+        
+        # DataFrame Display
+        st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
-    # Process Data for Display
-    rows = []
-    total_buy = 0
-    total_val = 0
+    st.divider()
     
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    # --- Guestbook Section ---
+    st.subheader(f"📝 방명록 ({target_user}님의 농장)")
     
-    for i, crop in enumerate(crops):
-        status_text.text(f"Updating {crop['ticker']}...")
-        current_price = get_current_price(crop["ticker"])
-        progress_bar.progress((i + 1) / len(crops))
-        
-        profit_rate = ((current_price - crop["buy_price"]) / crop["buy_price"]) * 100 if crop["buy_price"] > 0 else 0
-        profit_amt = (current_price - crop["buy_price"]) * crop["quantity"]
-        
-        # Daily Logic
-        buy_dt = datetime.datetime.strptime(crop["buy_date"], "%Y-%m-%d")
-        days = max(1, (datetime.datetime.now() - buy_dt).days)
-        daily_rate = profit_rate / days
-        
-        total_buy += crop["buy_price"] * crop["quantity"]
-        total_val += current_price * crop["quantity"]
-        
-        rows.append({
-            "상태": get_status_emoji(profit_rate),
-            "종목": crop["ticker"],
-            "매수가": f"${crop['buy_price']:.2f}",
-            "현재가": f"${current_price:.2f}",
-            "수익률": f"{profit_rate:.2f}%",
-            "일간": f"{daily_rate:.2f}%/일",
-            "수익금": f"${profit_amt:.2f}",
-            "수량": crop["quantity"],
-            "매수일": crop["buy_date"]
-        })
-    
-    status_text.empty()
-    progress_bar.empty()
-    
-    # Summary Metrics
-    if total_buy > 0:
-        total_profit = total_val - total_buy
-        total_profit_rate = (total_profit / total_buy) * 100
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("총 가치", f"${total_val:,.2f}")
-        col2.metric("총 매수액", f"${total_buy:,.2f}")
-        col3.metric("총 수익", f"${total_profit:,.2f}", f"{total_profit_rate:.2f}%")
-    
-    # DataFrame Display
-    st.dataframe(pd.DataFrame(rows), use_container_width=True)
+    # 1. Leave a Message (If Visitor)
+    if logged_in_user != target_user:
+        with st.form("guestbook_form"):
+            msg = st.text_area("응원의 메시지를 남겨주세요!", height=80)
+            submitted = st.form_submit_button("메시지 남기기")
+            if submitted and msg:
+                sm.add_guestbook_message(target_user, logged_in_user, msg)
+                st.success("메시지가 등록드었습니다!")
+                st.rerun()
+
+    # 2. Display Messages
+    messages = sm.get_guestbook_messages(target_user)
+    if messages:
+        # Show recent first
+        for m in messages[::-1]:
+            with st.chat_message("user"):
+                st.write(f"**{m['Sender']}** ({m['Date']})")
+                st.write(m['Message'])
+    else:
+        st.caption("아직 방명록 메시지가 없습니다. 첫 번째 메시지를 남겨보세요!")
 
 def show_plant(sm, user):
     st.header("🌱 작물 심기 (매수)")
