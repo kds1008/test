@@ -15,22 +15,26 @@ class SheetManager:
 
     def _connect(self):
         """Connects to Google Sheets using robust authentication (Secrets or Local File)."""
+        # 1. Try Streamlit Secrets (Cloud Environment)
         try:
-            # 1. Try Streamlit Secrets (Cloud Environment)
+            # Check if secrets are available without crashing
             if "gcp_service_account" in st.secrets:
                 creds_dict = st.secrets["gcp_service_account"]
-                # gspread can authorize from a dict? No, usually it takes a filename or a credentials object.
-                # However, st.secrets returns a dict. We can use ServiceAccountCredentials.from_json_keyfile_dict
                 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPE)
                 return gspread.authorize(creds)
-            
-            # 2. Try Local File (Local Environment)
-            else:
-                creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", SCOPE)
-                return gspread.authorize(creds)
+        except:
+            pass # Secrets failed, fall back to local file
 
+        # 2. Try Local File (Local Environment)
+        try:
+            creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", SCOPE)
+            return gspread.authorize(creds)
         except Exception as e:
-            st.error(f"구글 시트 연결 실패: {e}")
+            print(f"DEBUG: Connection Error: {e}") # Debugging
+            try:
+                st.error(f"구글 시트 연결 실패: {e}")
+            except:
+                pass
             return None
 
     def _get_sheet(self):
