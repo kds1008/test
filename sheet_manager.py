@@ -207,3 +207,54 @@ class SheetManager:
             log_data['profit_amt'] if log_data['profit_amt'] is not None else ""
         ]
         ws.append_row(row)
+
+    # --- Auth Operations ---
+    
+    def _hash_password(self, password):
+        import hashlib
+        return hashlib.sha256(password.encode()).hexdigest()
+
+    def register_user(self, nickname, password):
+        """Registers a new user. Returns True if successful, False if nickname exists."""
+        ws = self._get_worksheet("Users")
+        if not ws: return False
+        
+        self._ensure_headers(ws, ["Nickname", "PasswordHash"])
+        
+        # Check if exists
+        try:
+            cell = ws.find(nickname)
+            if cell: return False # Already exists
+        except gspread.exceptions.CellNotFound:
+            pass # Good, doesn't exist
+
+        ws.append_row([nickname, self._hash_password(password)])
+        return True
+
+    def login_user(self, nickname, password):
+        """Verifies credentials. Returns True if valid."""
+        ws = self._get_worksheet("Users")
+        if not ws: return False
+        
+        self._ensure_headers(ws, ["Nickname", "PasswordHash"])
+        
+        try:
+            cell = ws.find(nickname)
+            if not cell: return False
+            
+            # Get hash from next column
+            stored_hash = ws.cell(cell.row, cell.col + 1).value
+            return stored_hash == self._hash_password(password)
+        except:
+            return False
+
+    def get_all_users(self):
+        """Returns a list of all nicknames."""
+        ws = self._get_worksheet("Users")
+        if not ws: return []
+        
+        try:
+            records = ws.get_all_records()
+            return [r['Nickname'] for r in records if r['Nickname']]
+        except:
+            return []

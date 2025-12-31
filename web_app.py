@@ -33,41 +33,99 @@ def main():
     if not sm.client:
         st.stop() # Stop if connection failed
 
-    # 2. Login (Nickname)
+    # 2. Authentication (Login/Register)
     if "user_nickname" not in st.session_state:
-        with st.form("login_form"):
-            st.header("로그인 (닉네임 입력)")
-            nickname = st.text_input("닉네임 (예: 홍길동)")
-            submitted = st.form_submit_button("농장 입장하기")
-            
-            if submitted:
-                if nickname:
-                    st.session_state.user_nickname = nickname
-                    st.success(f"환영합니다, {nickname}님!")
-                    st.rerun()
-                else:
-                    st.error("닉네임을 입력해주세요.")
-        return # Stop execution until logged in
+        st.header("🔐 로그인 / 회원가입")
+        tab1, tab2 = st.tabs(["로그인", "회원가입"])
+        
+        with tab1:
+            with st.form("login_form"):
+                l_user = st.text_input("닉네임", key="login_user")
+                l_pass = st.text_input("비밀번호", type="password", key="login_pass")
+                submitted = st.form_submit_button("로그인")
+                if submitted:
+                    if sm.login_user(l_user, l_pass):
+                        st.session_state.user_nickname = l_user
+                        st.success(f"{l_user}님 환영합니다!")
+                        st.rerun()
+                    else:
+                        st.error("닉네임 또는 비밀번호가 틀렸습니다.")
 
+        with tab2:
+            with st.form("register_form"):
+                r_user = st.text_input("생성할 닉네임", key="reg_user")
+                r_pass = st.text_input("설정할 비밀번호", type="password", key="reg_pass")
+                submitted = st.form_submit_button("회원가입")
+                if submitted:
+                    if r_user and r_pass:
+                        if sm.register_user(r_user, r_pass):
+                            st.success("회원가입 성공! 로그인 탭에서 로그인해주세요.")
+                        else:
+                            st.error("이미 존재하는 닉네임입니다.")
+                    else:
+                        st.error("닉네임과 비밀번호를 모두 입력해주세요.")
+        return
+
+    # 3. Logged In State
     user = st.session_state.user_nickname
-    st.sidebar.write(f"👤 **{user}**님의 농장")
+    
+    # Sidebar - User Info
+    st.sidebar.title(f"👤 {user}")
     if st.sidebar.button("로그아웃"):
         del st.session_state.user_nickname
         st.rerun()
-
-    # Load Data (from Sheet)
-    crops = sm.load_farm(user)
-    history = sm.load_history(user)
     
-    # Sidebar Menu
-    menu = st.sidebar.radio("메뉴", ["농장 (Farm)", "작물 심기 (Plant)", "수확 하기 (Harvest)", "장부 (History)"])
+    st.sidebar.divider()
+
+    # Sidebar - Farm Navigation (Guest Mode)
+    st.sidebar.subheader("🌐 농장 이동")
+    
+    if "all_users" not in st.session_state:
+        st.session_state.all_users = sm.get_all_users()
+    
+    # Refresh user list button
+    if st.sidebar.button("🔄 사용자 목록 갱신"):
+        st.session_state.all_users = sm.get_all_users()
+        st.rerun()
+        
+    all_users_list = st.session_state.all_users
+    # Ensure current user is in list
+    if user not in all_users_list: all_users_list.append(user)
+    
+    # Select Target Farm
+    # Default index is self
+    try:
+        default_idx = all_users_list.index(user)
+    except:
+        default_idx = 0
+        
+    target_user = st.sidebar.selectbox("방문할 농장 선택", all_users_list, index=default_idx)
+    
+    # Permission Check
+    is_owner = (user == target_user)
+    
+    if is_owner:
+        st.info(f"🏡 나의 농장 관리 모드")
+    else:
+        st.warning(f"👀 {target_user}님의 농장 (구경 모드)")
+
+    # Sidebar - Menu
+    menu_options = ["농장 (Farm)", "장부 (History)"]
+    if is_owner:
+        menu_options = ["농장 (Farm)", "작물 심기 (Plant)", "수확 하기 (Harvest)", "장부 (History)"]
+    
+    menu = st.sidebar.radio("메뉴", menu_options)
+    
+    # Load Data for Target User
+    crops = sm.load_farm(target_user)
+    history = sm.load_history(target_user)
     
     if menu == "농장 (Farm)":
         show_farm(crops)
     elif menu == "작물 심기 (Plant)":
-        show_plant(sm, user)
+        show_plant(sm, user) # Only owner accesses this
     elif menu == "수확 하기 (Harvest)":
-        show_harvest(sm, user, crops)
+        show_harvest(sm, user, crops) # Only owner accesses this
     elif menu == "장부 (History)":
         show_history(history)
 
